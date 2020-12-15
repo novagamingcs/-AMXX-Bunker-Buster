@@ -1,0 +1,742 @@
+#include <amxmodx>
+#include <engine>
+#include <fakemeta>
+#include <fakemeta_util>
+#include <hamsandwich>
+#include <cstrike>
+#include <xs>
+#include <fun>
+
+#if AMXX_VERSION_NUM < 183
+
+
+#include <dhudmessage>
+
+
+#define MAX_PLAYERS		32
+#endif
+
+new g_icvar[5]
+
+#define DAMAGEBUNKER get_pcvar_float(g_icvar[1]) 
+
+
+#define CLASSNAME "nova_bunker_bomb" 
+#define KNIFE_MODEL_OLD "models/v_knife.mdl"
+#define DMG_HEGRENADE (1<<24)
+#define CLASSNAMEPLANE "nova_plane_bomb"
+#define v_model "models/bynova/v_bunkerbuster.mdl"
+#define s_model "models/bynova/bunkerbuster_missile.mdl"
+#define target_model "models/bynova/bunkerbuster_target.mdl"
+#define plane_model "models/bynova/bunkerbuster_target2.mdl"
+#define sight_model "models/bynova/v_bunkerbuster_sight.mdl"
+#define SOUND_FLY   "bynova/bunker_explode.wav"
+#define SOUND_EXPLODE  "bynova/bunker_explode.wav"
+#define SOUND_FLY_PLANE  "bynova/bunker_plane_fly.wav"
+#define SOUND_TARGET  "bynova/target_selected.wav"
+
+#define EV_INT_WEAPONKEY        EV_INT_impulse
+#define bunker_key     91421
+
+
+enum (+= 100)
+{
+	TASK_LAUNCH = 2000,
+	TASK_CALLBOMB,
+	TASK_DROPBOMB,
+	TASK_STOPBOMB,
+	TASK_FLY,
+	TASK_SIGHT_BEGIN
+}
+
+new g_iMaxPlayers , hasbunker[33],zoombopen[33],HamHook:g_iHamHookKilledPost,gBoomSprite,gBoomSprite2 ,g_flameSpr ,gmsgWeaponList
+
+
+public plugin_init()
+{
+	register_plugin("Bunker Buster", "1.0", "N.O.V.A")
+	g_icvar[0] = register_cvar("nv_bunker_cost","5000")
+	g_icvar[1] = register_cvar("nv_bunker_damage","50")
+	register_touch(CLASSNAME, "*", "fw_RocketTouch")
+	register_event("HLTV", "NewRound", "a", "1=0", "2=0")
+	register_clcmd("buyatom","buythis")
+	register_concmd("say /bunker","buythis")
+	register_event("CurWeapon","checkModel","b","1=1")
+	RegisterHam(Ham_Weapon_PrimaryAttack, "weapon_knife" , "primary_attack")
+	RegisterHam(Ham_Weapon_SecondaryAttack, "weapon_knife" , "primary_secondary")
+	register_message(get_user_msgid("DeathMsg"), "Msg_DeathMsg")
+	RegisterHam(Ham_Item_AddToPlayer, "weapon_knife", "bunkerAddToPlayer")
+	DisableHamForward((g_iHamHookKilledPost = RegisterHam(Ham_Killed, "player", "Ham_Killed_Post", 1)))
+	register_clcmd("weapon_bunker","Hookselect")
+	g_iMaxPlayers = get_maxplayers()
+	gmsgWeaponList = get_user_msgid("WeaponList")
+	
+}
+
+public plugin_precache()
+{
+	precache_model(s_model);
+	precache_model(KNIFE_MODEL_OLD);
+	precache_model(v_model);
+	precache_model(target_model); 
+	precache_model(sight_model);
+	precache_model(plane_model);
+	precache_sound(SOUND_EXPLODE);
+	precache_sound(SOUND_FLY_PLANE);
+	precache_sound(SOUND_FLY);
+	precache_sound(SOUND_TARGET);
+	gBoomSprite = precache_model("sprites/bynova/bunkerbuster_explosion.spr");
+	g_flameSpr = precache_model("sprites/bynova/bunkerbuster_fire.spr");
+	precache_generic("sprites/weapon_bunker.txt" );
+	precache_generic("sprites/640hud9929.spr" );
+   
+      
+}
+
+
+
+public client_putinserver(id)
+{
+	
+	hasbunker[id] = false
+	zoombopen[id] = false
+}
+
+public client_authorized(id)
+{
+	hasbunker[id] = false
+	zoombopen[id] = false
+}
+
+
+public buythis(id)
+{
+	new iMoney = cs_get_user_money( id );
+	new iCost = get_pcvar_num(g_icvar[0]);
+	if( iMoney > iCost )
+	{
+		hasbunker[id] = true
+		Sprite(id,1)
+		cs_set_user_money(id,iMoney-iCost)
+	}
+
+}
+
+public Sprite(id,type)
+{
+	message_begin(MSG_ONE, gmsgWeaponList, {0,0,0}, id)
+	write_string(type?"weapon_bunker":"weapon_knife")
+	write_byte(-1)
+	write_byte(-1)
+	write_byte(-1)
+	write_byte(-1)
+	write_byte(2)
+	write_byte(1)
+	write_byte(CSW_KNIFE)
+	write_byte(0)
+	message_end()
+}
+
+public bunkerAddToPlayer(bunker, id){
+	if(!is_valid_ent(bunker) || !is_user_connected(id)) return HAM_IGNORED
+        
+	if(entity_get_int(bunker, EV_INT_WEAPONKEY) == bunker_key)
+	{
+		hasbunker[id] = true
+		entity_set_int(bunker, EV_INT_WEAPONKEY, 0)
+		Sprite(id,1)
+		return HAM_HANDLED
+	}
+	if(entity_get_int(bunker, EV_INT_WEAPONKEY) != bunker_key) Sprite(id,0)
+	
+	return HAM_IGNORED
+}
+
+public Hookselect(id){
+	engclient_cmd(id, "weapon_knife")
+	return PLUGIN_HANDLED
+}
+public checkModel(id)
+{
+	if (!hasbunker[id])
+		return PLUGIN_HANDLED
+	
+	new szWeapID = read_data(2)
+	if (szWeapID == CSW_KNIFE && hasbunker[id] == true)
+	{
+	    set_pev(id, pev_viewmodel2, v_model)
+	    Set_WeaponAnim(id,3)  
+         }
+         return PLUGIN_HANDLED
+}
+
+public primary_attack(knife)
+{
+   static id 
+   id = get_pdata_cbase(knife, 41)
+   if(hasbunker[id] && zoombopen[id])
+	{
+                  call_bomb(id)
+		
+	}
+   
+}
+public primary_secondary(knife)
+{
+   static id 
+   id = get_pdata_cbase(knife, 41)
+   if(hasbunker[id])
+	{
+                  set_pev(id, pev_viewmodel2, sight_model)
+                  zoombopen[id] = true
+                  Set_WeaponAnim(id,2)
+	}
+   
+}
+
+
+
+public NewRound()
+{
+	for(new id = 1; id <= g_iMaxPlayers ;id++)
+	{
+		if(task_exists(id))
+			remove_task(id)
+			Sprite(id,0)
+			
+	}
+	
+	static iEnt
+	iEnt = -1
+	while((iEnt = engfunc(EngFunc_FindEntityByString, iEnt, "classname", CLASSNAME)))
+	{
+		if(is_valid_ent(iEnt))
+			engfunc(EngFunc_RemoveEntity, iEnt)
+	}
+	
+	
+	
+}
+	
+#define valueoforigin1 200.0
+#define valueoforigin2 100.0
+#define valueoforigin3 300.0
+
+new Float:MyOrigin[3]
+new Float:MyTarget[3]
+new Float:StartPesawat[3]
+new Float:StopPesawat[3]
+public call_bomb(id)
+{
+	//id -= TASK_CALLBOMB
+	if(!is_user_alive(id)) return
+	fm_get_aim_origin(id, MyOrigin)
+	fm_get_aim_origin(id, MyTarget)
+	static Float:Origintouch_1[3], Float:Origintouch_2[3], Float:Origintouch_3[3], Float:Origintouch_4[3] , Float:Origintouchbaru5[3] ,Float:Origintouchbaru6[3]
+	Origintouch_1[0] = MyOrigin[0] - valueoforigin1
+	Origintouch_1[1] = MyOrigin[1] 
+	Origintouch_1[2] = MyOrigin[2]
+	
+	Origintouch_2[0] = MyOrigin[0] + valueoforigin1
+	Origintouch_2[1] = MyOrigin[1] 
+	Origintouch_2[2] = MyOrigin[2]
+	
+	Origintouch_3[0] = MyOrigin[0] - valueoforigin2
+	Origintouch_3[1] = MyOrigin[1] 
+	Origintouch_3[2] = MyOrigin[2]
+	
+	Origintouch_4[0] = MyOrigin[0] + valueoforigin2
+	Origintouch_4[1] = MyOrigin[1] 
+	Origintouch_4[2] = MyOrigin[2]
+	
+	Origintouchbaru5[0] = MyOrigin[0] - valueoforigin3
+	Origintouchbaru5[1] = MyOrigin[1] 
+	Origintouchbaru5[2] = MyOrigin[2]
+	
+	Origintouchbaru6[0] = MyOrigin[0] + valueoforigin3
+	Origintouchbaru6[1] = MyOrigin[1] 
+	Origintouchbaru6[2] = MyOrigin[2]
+	
+	StartPesawat[0] = MyOrigin[0] - valueoforigin1
+	StartPesawat[1] = MyOrigin[1] 
+	StartPesawat[2] = MyOrigin[2]
+	
+	StopPesawat[0] = MyOrigin[0] + valueoforigin2
+	StopPesawat[1] = MyOrigin[1] 
+	StopPesawat[2] = MyOrigin[2]
+	create_target(id, Origintouch_1)
+	create_target(id, Origintouch_2)
+	create_target(id, Origintouch_3)
+	create_target(id, Origintouch_4)
+	create_target(id, Origintouchbaru5)
+	create_target(id, Origintouchbaru6)
+	create_target(id, MyOrigin)
+	call_plane(id, StartPesawat)
+	zoombopen[id] = false
+	hasbunker[id] = false
+	PlayEmitSound(id,SOUND_TARGET,CHAN_ITEM)
+	
+}
+
+public call_plane(id, Float:origin[3])
+{
+	
+	new ent = create_entity("info_target")
+	origin[0] -= 600.0
+	origin[2] += 600.0
+	entity_set_origin(ent, origin)
+	engfunc(EngFunc_SetModel, ent, plane_model)
+	entity_set_int(ent, EV_INT_movetype, MOVETYPE_NOCLIP)
+	set_entity_visibility(ent, 0)
+	set_task(2.0, "task_fly", ent+TASK_FLY)
+	set_task(3.5, "drop_bomb", id+TASK_DROPBOMB)
+	
+}
+
+public task_fly(ent)
+{
+	ent-= TASK_FLY
+	if(!is_valid_ent(ent)) return
+	set_entity_visibility(ent, 1)
+	StopPesawat[0] -= 600.0
+	StopPesawat[2] += 600.0
+	new id
+	for( id = 1 ;id <= 32 ;id++ )
+	{
+	PlayEmitSound(id,SOUND_FLY_PLANE,CHAN_ITEM)
+	}
+	ent_move_to(ent, StopPesawat, 600)
+	set_task(12.0, "task_stop", ent+TASK_STOPBOMB)
+	
+}
+
+public task_stop(ent)
+{
+	ent-=TASK_STOPBOMB
+	if(!is_valid_ent(ent)) return
+	
+	
+	
+	set_entity_visibility(ent, 0)
+	
+	set_task(12.4, "task_remove", ent+TASK_STOPBOMB)
+}
+public task_remove(ent)
+{
+	ent-=TASK_STOPBOMB
+	if(!is_valid_ent(ent)) return
+	
+	remove_entity(ent)
+}
+
+public drop_bomb(id)
+{
+	id-= TASK_DROPBOMB
+	if(!is_user_alive(id)) return
+	set_task(0.5,"create_bomb",id)
+	set_pev(id,pev_viewmodel2,KNIFE_MODEL_OLD)
+	Sprite(id,0)
+	PlayEmitSound(id,SOUND_FLY,CHAN_ITEM)
+	
+}
+	
+public create_bomb(id)
+{	         
+        new Float:origin[3]
+        static ent 
+        ent = -1 
+     
+		while((ent = find_ent_by_class(ent, "bunkertarget")))
+		{
+		pev(ent, pev_origin, origin) 
+		if(pev(ent, pev_owner) != id) 
+		continue 
+		static iEnt, Float:tmp_fVelocity[3] = {0.0, 0.0, 0.0}
+		origin[2] += 600.0
+		iEnt = engfunc(EngFunc_CreateNamedEntity, engfunc(EngFunc_AllocString, "info_target"))
+		if(!pev_valid(iEnt))
+			return
+		engfunc(EngFunc_SetModel, iEnt, s_model)
+		set_pev(iEnt, pev_solid, SOLID_TRIGGER)
+		set_pev(iEnt, pev_movetype, MOVETYPE_FLY)
+		set_pev(iEnt, pev_size, Float:{-34.0, -34.0, -94.0}, Float:{34.0, 34.0, 95.0})
+		tmp_fVelocity[2] = random_float(-600.0, -500.0)
+		set_pev(iEnt, pev_velocity, tmp_fVelocity)
+		set_pev(iEnt, pev_classname, CLASSNAME)
+		set_pev(iEnt, pev_origin, origin)
+		set_pev(iEnt, pev_iuser2, id)
+		new Float:vAngle[3]
+		vAngle[0] -= 90.0
+		set_pev(iEnt, pev_angles, vAngle)
+		set_pev(iEnt, pev_nextthink, get_gametime() + 0.5)
+	}
+		
+
+}
+		
+
+public fw_RocketTouch(iEnt, iTouch)
+{
+	if(!pev_valid(iEnt))
+		return
+		
+	static Float:fOrigin[3]
+	pev(iEnt, pev_origin, fOrigin)
+	new iVictim = -1
+	new iOwner ;iOwner = pev( iEnt, pev_iuser2 )
+	while((iVictim = find_ent_in_sphere(iVictim, fOrigin, 200.0)))
+	{
+		if(Is_Valid_User(iVictim) && Is_Valid_User(iOwner))
+	         {
+		 	if(cs_get_user_team(iVictim) == cs_get_user_team(iOwner))
+			{
+			      ///IF YOU WANNA GIVE MONEY YOU CAN GIVE 
+			}
+			else
+			{
+			    ExecuteHamB(Ham_TakeDamage, iVictim, iEnt, iOwner, float(DAMAGEBUNKER), DMG_HEGRENADE)
+	                   }
+	 }
+         }
+        CreateExplosion(fOrigin)
+	
+	remove_entity_name("bunkertarget")
+	new id
+	for( id = 1 ;id <= 32 ;id++ )
+	{
+	if(Is_Valid_User(id)){
+	new gmsgShake = get_user_msgid("ScreenShake") 
+	message_begin(MSG_ONE, gmsgShake, {0,0,0}, id)
+	write_short(255<< 14 ) //ammount 
+	write_short(10 << 14) //lasts this long 
+	write_short(255<< 14) //frequency 
+	message_end()
+	PlayEmitSound(id,SOUND_EXPLODE,CHAN_ITEM) 
+	}
+	} 
+	set_pev(iEnt, pev_movetype, MOVETYPE_NONE)
+	set_pev(iEnt, pev_solid, SOLID_NOT)
+	engfunc(EngFunc_SetModel, iEnt, "")
+	set_task(0.5, "makefunction", iEnt)
+	set_task(10.5, "remove",iEnt)
+}
+
+public Is_Valid_User( id )
+{
+    if( is_user_connected( id ) && ( pev( id, pev_flags ) & FL_CLIENT ) && is_user_alive(id) )
+        return true
+
+    return false
+}
+
+public remove(Ent)
+{
+	if(!pev_valid(Ent))
+		return
+		
+	remove_entity(Ent)
+	
+}
+public create_target(attacker, Float:origin[3])
+{
+	new ent = engfunc(EngFunc_CreateNamedEntity, engfunc(EngFunc_AllocString, "info_target"))
+	set_pev(ent, pev_classname, "bunkertarget")
+	set_pev(ent, pev_mins, Float:{-1.0, -1.0, -1.0})
+	set_pev(ent, pev_maxs, Float:{1.0, 1.0, 1.0})
+	set_pev(ent, pev_origin, origin)
+	set_pev(ent, pev_solid, SOLID_BBOX)
+	set_pev(ent, pev_owner, attacker)
+	engfunc(EngFunc_SetModel, ent, target_model)	
+	set_pev(ent, pev_movetype, 6)
+	set_entity_anim(ent, 0)
+	
+
+}
+public Msg_DeathMsg()
+{
+	new iAttacker = get_msg_arg_int(1)
+	new szClassName[16], szName[32], szBuffer[64]
+
+	get_msg_arg_string(4, szClassName, charsmax(szClassName))
+	get_user_name(iAttacker, szName, charsmax(szName))
+	
+	if(equal(szClassName, CLASSNAME))
+	{
+		formatex(szBuffer, charsmax(szBuffer), "%s (BUNKER BUSTER)", szName)
+		
+		set_user_fake_name(iAttacker, szBuffer)
+		EnableHamForward(g_iHamHookKilledPost)
+
+		set_msg_arg_string(4, "teammate")
+	}
+}
+
+public Ham_Killed_Post(iVictim, iAttacker, iGib)
+{
+	DisableHamForward(g_iHamHookKilledPost)
+	reset_user_info(iAttacker)
+	dllfunc(DLLFunc_ClientUserInfoChanged, iAttacker, engfunc(EngFunc_GetInfoKeyBuffer, iAttacker))
+}
+
+
+stock reset_user_info(iPlayer)
+{
+	new szUserInfo[256]
+	copy_infokey_buffer(engfunc(EngFunc_GetInfoKeyBuffer, iPlayer), szUserInfo, charsmax(szUserInfo))
+
+	message_begin(MSG_ALL, SVC_UPDATEUSERINFO)
+	write_byte(iPlayer - 1)
+	write_long(get_user_userid(iPlayer))
+	write_string(szUserInfo)
+	write_long(0)
+	write_long(0)
+	write_long(0)
+	write_long(0)
+	message_end()
+}
+
+stock set_user_fake_name(iPlayer, szName[])
+{
+	message_begin(MSG_ALL, SVC_UPDATEUSERINFO)
+	write_byte(iPlayer - 1)
+	write_long(get_user_userid(iPlayer))
+	write_char('\')
+	write_char('n')
+	write_char('a')
+	write_char('m')
+	write_char('e')
+	write_char('\')
+	write_string(szName)
+	for(new i; i < 16; i++) write_byte(0)
+	message_end()
+}
+
+stock CreateExplosion(Float:fOrigin[])
+{
+	message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+	write_byte(TE_EXPLOSION)
+	engfunc(EngFunc_WriteCoord, fOrigin[0])
+	engfunc(EngFunc_WriteCoord, fOrigin[1])
+	engfunc(EngFunc_WriteCoord, fOrigin[2])
+	write_short(gBoomSprite)
+	write_byte(45)
+	write_byte(35)
+	write_byte(0)
+	message_end()
+
+	
+}
+
+stock ChatColor(const id, const input[], any:...)
+{
+        new count = 1, players[32]
+        static msg[191]
+        vformat(msg, 190, input, 3)
+       
+        replace_all(msg, 190, "!g", "^4") // Green Color
+        replace_all(msg, 190, "!y", "^1") // Default Color
+        replace_all(msg, 190, "!team", "^3") // Team Color
+        replace_all(msg, 190, "!team2", "^0") // Team2 Color
+       
+        if (id) players[0] = id; else get_players(players, count, "ch")
+        {
+                for (new i = 0 ;i < count; i++)
+                {
+                        if (is_user_connected(players[i]))
+                        {
+                                message_begin(MSG_ONE_UNRELIABLE, get_user_msgid("SayText"), _, players[i])
+                                write_byte(players[i])
+                                write_string(msg)
+                                message_end()
+                        }
+                }
+        }
+}
+
+
+PlayEmitSound(id, const sound[], type)
+{
+	emit_sound(id, type, sound, 1.0, ATTN_NORM, 0, PITCH_NORM)
+}
+
+stock set_entity_anim(ent, anim)
+{
+	entity_set_float(ent, EV_FL_animtime, get_gametime())
+	entity_set_float(ent, EV_FL_framerate, 1.0)
+	entity_set_int(ent, EV_INT_sequence, anim)	
+}
+stock Set_WeaponAnim(id, anim)
+{
+	set_pev(id, pev_weaponanim, anim)
+	
+	message_begin(MSG_ONE_UNRELIABLE, SVC_WEAPONANIM, {0, 0, 0}, id)
+	write_byte(anim)
+	write_byte(pev(id, pev_body))
+	message_end()
+}
+
+	
+stock aim_at_origin(id, Float:target[3], Float:angles[3])
+{
+	static Float:vec[3]
+	pev(id,pev_origin,vec)
+	vec[0] = target[0] - vec[0]
+	vec[1] = target[1] - vec[1]
+	vec[2] = target[2] - vec[2]
+	engfunc(EngFunc_VecToAngles,vec,angles)
+	angles[0] *= -1.0, angles[2] = 0.0
+}
+stock ent_move_to(ent, Float:target[3], speed)
+{
+	// set vel
+	static Float:vec[3]
+	aim_at_origin(ent,target,vec)
+	engfunc(EngFunc_MakeVectors, vec)
+	global_get(glb_v_forward, vec)
+	vec[0] *= speed
+	vec[1] *= speed
+	vec[2] *= speed
+	set_pev(ent, pev_velocity, vec)
+		
+	// turn to target
+	new Float:angle[3]
+	aim_at_origin(ent, target, angle)
+	angle[0] *= -1.0
+	entity_set_vector(ent, EV_VEC_angles, angle)
+}
+public makefunction(Ent)
+{
+	if(!pev_valid(Ent))
+		return
+	explode(Ent)	
+	damagefire(Ent)
+}
+public damagefire(Ent)
+{
+	if(!pev_valid(Ent))
+		return
+	
+	new Float:origin[3]
+	pev(Ent, pev_origin, origin)
+	new iVictim = -1
+	new iOwner ;iOwner = pev( Ent, pev_iuser2 )
+	
+	while((iVictim = find_ent_in_sphere(iVictim, origin, 200.0)))
+	{
+		if(Is_Valid_User(iVictim) && Is_Valid_User(iOwner))
+	         {
+		 	if(cs_get_user_team(iVictim) == cs_get_user_team(iOwner))
+			{
+			      ///IF YOU WANNA GIVE MONEY YOU CAN GIVE 
+			}
+			else
+			{
+			    ExecuteHamB(Ham_TakeDamage, iVictim, Ent, iOwner, float(DAMAGEBUNKER), DMG_HEGRENADE)
+	        }
+	 }
+         }
+         set_task(0.5, "makefunction", Ent)
+}
+public explode(Ent)
+{
+	new Float:originZ[3], Float:originX[3]
+	pev(Ent, pev_origin, originX)
+	entity_get_vector(Ent, EV_VEC_origin, originZ)
+	new rand = random_num(20,100)
+	static Float:Origintouch_1[3], Float:Origintouch_2[3], Float:Origintouch_3[3], Float:Origintouch_4[3]
+	Origintouch_1[0] = originZ[0] - rand
+	Origintouch_1[1] = originZ[1]
+	Origintouch_1[2] = originZ[2]+rand
+	
+	Origintouch_2[0] = originZ[0] + rand
+	Origintouch_2[1] = originZ[1]
+	Origintouch_2[2] = originZ[2]+rand
+	
+	Origintouch_3[0] = originZ[0]
+	Origintouch_3[1] = originZ[1] - rand
+	Origintouch_3[2] = originZ[2]+rand
+	
+	Origintouch_4[0] = originZ[0] - rand
+	Origintouch_4[1] = originZ[1] + rand
+	Origintouch_4[2] = originZ[2]+rand
+	///////////API TENGAH
+	message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+	write_byte(TE_SPRITE)
+	engfunc(EngFunc_WriteCoord, originZ[0])
+	engfunc(EngFunc_WriteCoord, originZ[1])
+	engfunc(EngFunc_WriteCoord, originZ[2]+65.0)
+	write_short(g_flameSpr) // Sprite index
+	write_byte(5) // Scale
+	write_byte(50) // Framerate
+	message_end()
+	if(!is_wall_between_points(originZ, Origintouch_1, Ent))
+	{
+		///////////API 1
+		message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+		write_byte(TE_SPRITE)
+		engfunc(EngFunc_WriteCoord, Origintouch_1[0])
+		engfunc(EngFunc_WriteCoord,Origintouch_1[1])
+		engfunc(EngFunc_WriteCoord, Origintouch_1[2])
+		write_short(g_flameSpr) // Sprite index
+		write_byte(10) // Scale
+		write_byte(50) // Framerate
+		message_end()
+	}
+	if(!is_wall_between_points(originZ, Origintouch_2, Ent))
+	{
+		///////////API 2
+		message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+		write_byte(TE_SPRITE)
+		engfunc(EngFunc_WriteCoord, Origintouch_2[0])
+		engfunc(EngFunc_WriteCoord,Origintouch_2[1])
+		engfunc(EngFunc_WriteCoord, Origintouch_2[2])
+		write_short(g_flameSpr) // Sprite index
+		write_byte(10) // Scale
+		write_byte(50) // Framerate
+		message_end()
+	}
+	if(!is_wall_between_points(originZ, Origintouch_3, Ent))
+	{
+		///////////API 3
+		message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+		write_byte(TE_SPRITE)
+		engfunc(EngFunc_WriteCoord, Origintouch_3[0])
+		engfunc(EngFunc_WriteCoord,Origintouch_3[1])
+		engfunc(EngFunc_WriteCoord, Origintouch_3[2])
+		write_short(g_flameSpr) // Sprite index
+		write_byte(10) // Scale
+		write_byte(50) // Framerate
+		message_end()
+	}
+	if(!is_wall_between_points(originZ, Origintouch_4, Ent))
+	{
+		///////////API 4
+		message_begin(MSG_BROADCAST, SVC_TEMPENTITY)
+		write_byte(TE_SPRITE)
+		engfunc(EngFunc_WriteCoord, Origintouch_4[0])
+		engfunc(EngFunc_WriteCoord,Origintouch_4[1])
+		engfunc(EngFunc_WriteCoord, Origintouch_4[2])
+		write_short(g_flameSpr) // Sprite index
+		write_byte(10) // Scale
+		write_byte(50) // Framerate
+		message_end()
+	}
+	
+}
+
+stock is_wall_between_points(Float:start[3], Float:end[3], ignore_ent)
+{
+	static ptr
+	ptr = create_tr2()
+
+	engfunc(EngFunc_TraceLine, start, end, IGNORE_MONSTERS, ignore_ent, ptr)
+	
+	static Float:EndPos[3]
+	get_tr2(ptr, TR_vecEndPos, EndPos)
+
+	free_tr2(ptr)
+	return floatround(get_distance_f(end, EndPos))
+}
+/* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
+*{\\ rtf1\\ ansi\\ deff0{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ lang2057\\ f0\\ fs16 \n\\ par }
+*/

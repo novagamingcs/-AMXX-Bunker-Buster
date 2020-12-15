@@ -1,0 +1,4 @@
+10
+weapon			640 bunker/640hud166	0	0 	170	45
+weapon_s		640 bunker/640hud166	0	45	170	45
+ammo			640 bunker/640hud18		25	 231	24	24
