@@ -28,6 +28,17 @@
 
 
 /*----------------------------------*/
+/*           WEAPON-SUPPORTS        */
+/*----------------------------------*/
+
+// Uncomment the weapon you Wanna use and Comment the Others by "///"
+
+
+//#define KNIFE_ITEM
+#define HE_ITEM
+
+
+/*----------------------------------*/
 /*         ANTI-DECOMPILE           */
 /*----------------------------------*/
 
@@ -43,6 +54,7 @@
 #define NORMAL_MOD
 //#define ZOMBIE_ESCAPE_MOD
 //#define ZOMBIE_PLAUGE
+
 
 #if defined ZOMBIE_ESCAPE_MOD
 
@@ -86,10 +98,22 @@
 
 // Weapon Settings 
 
-#define CSW_BUNKER 	CSW_HEGRENADE
-#define weapon_bunker	"weapon_hegrenade"
-#define old_w_model "models/w_hegrenade.mdl"
 #define WEAPON_KEY	7812365
+
+#if defined HE_ITEM
+
+	#define CSW_BUNKER 	CSW_HEGRENADE
+	#define weapon_bunker	"weapon_hegrenade"
+	#define old_w_model "models/w_hegrenade.mdl"
+	
+#endif
+
+#if defined KNIFE_ITEM
+
+	#define CSW_BUNKER 	CSW_KNIFE
+	#define weapon_bunker	"weapon_knife"
+	
+#endif
 
 // Bunker Buster Two Modes.
 
@@ -216,9 +240,14 @@ public plugin_init()
 	register_touch(C_Bunker, "player", "Fw_Touch_Bunker");
 	
 	// Hams
+	
 	RegisterHam(Ham_Item_AddToPlayer, weapon_bunker , "fw_Item_AddToPlayer_Post", 1);
 	RegisterHam(Ham_Item_Deploy,weapon_bunker , "fw_Item_Deploy", 1);
-	RegisterHam(Ham_Weapon_PrimaryAttack,weapon_bunker,"fw_Primary_Attack");
+	
+	#if defined HE_ITEM
+		RegisterHam(Ham_Weapon_PrimaryAttack,weapon_bunker,"fw_Primary_Attack");
+	#endif
+	
 	RegisterHam(Ham_Spawn,"player","fw_Ham_Spawn");
 	
 	// Thinks
@@ -411,6 +440,11 @@ public Drop_Bunker(id)
 			Create_Fake_World(id);
 			Remove_Bunker(id);
 			ham_strip_weapon(id,weapon_bunker);
+			
+			#if defined KNIFE_ITEM
+				give_item(id,weapon_bunker);	
+			#endif
+			
 			return PLUGIN_HANDLED;
 		}
 	}
@@ -453,12 +487,24 @@ public Give_Bunker(id)
 	{
 		if(!Get_BitVar(g_has_Bunker,id))
 		{
-			Set_BitVar(g_has_Bunker,id);
-			UnSet_BitVar(g_selected,id);
-			UnSet_BitVar(g_zoom,id);
-			give_item(id,weapon_bunker);
-			engclient_cmd(id,weapon_bunker);
-			Wpnlist(id,1);
+			#if defined HE_ITEM
+			
+				Set_BitVar(g_has_Bunker,id);
+				UnSet_BitVar(g_selected,id);
+				UnSet_BitVar(g_zoom,id);
+				give_item(id,weapon_bunker);
+				engclient_cmd(id,weapon_bunker);
+				Wpnlist(id,1);
+				
+			#endif
+			#if defined KNIFE_ITEM
+			
+				Set_BitVar(g_has_Bunker,id);
+				UnSet_BitVar(g_selected,id);
+				UnSet_BitVar(g_zoom,id);
+				Wpnlist(id,1);
+				engclient_cmd(id,weapon_bunker);
+			#endif
 			
 			client_print(id,print_center,"Press E For Changing Mode");
 			
@@ -468,6 +514,7 @@ public Give_Bunker(id)
 			set_pev(id,pev_weaponmodel2,MODELS[M_P_MODEL]);
 			
 		}
+		#if defined HE_ITEM
 		else
 		{
 			// User Have Bunker Buseter , So lets Give Him AMMO.
@@ -478,6 +525,7 @@ public Give_Bunker(id)
 				cs_set_user_bpammo(id, CSW_BUNKER, cs_get_user_bpammo(id,CSW_BUNKER)+1);
 			}
 		}
+		#endif
 	}
 	
 }
@@ -569,8 +617,12 @@ public fw_CmdStart(id, uc_handle, seed)
 						pOrigin[2] = hOrigin[2];
 				
 						Set_BitVar(g_selected,id);
-						emit_sound(id, CHAN_WEAPON, SOUND[S_GAUGE],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+						
+						#if defined HE_ITEM
+							emit_sound(id, CHAN_WEAPON, SOUND[S_GAUGE],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+						#endif
 					}
+					
 					set_weapon_anim(id,0,1);
 				}
 				
@@ -581,7 +633,7 @@ public fw_CmdStart(id, uc_handle, seed)
 				if(Get_BitVar(g_selected,id) && Get_BitVar(g_zoom,id))
 				{
 					get_user_hitpoint(id,eOrigin);
-				
+					
 					// If The Starting and Ending Point are Same or Maybe Too Near 
 					// Than Throw Only One BOMB... at Aim Position....
 				
@@ -602,6 +654,14 @@ public fw_CmdStart(id, uc_handle, seed)
 					UnSet_BitVar(g_zoom,id);
 					UnSet_BitVar(g_selected,id);
 					set_pev(id,pev_viewmodel2,MODELS[M_V_MODEL]);
+					
+					#if defined KNIFE_ITEM
+						UnSet_BitVar(g_has_Bunker,id);
+						ham_strip_weapon(id,weapon_bunker);
+						give_item(id,weapon_bunker);
+						Wpnlist(id,0);
+					#endif
+					
 					set_task(0.5,"Task_Siren",id,_,_,"a",10);
 				}
 				
@@ -645,6 +705,9 @@ public fw_CmdStart(id, uc_handle, seed)
 		}
 	}
 }
+
+#if defined HE_ITEM
+
 public fw_Primary_Attack(ent)
 {
 	if(pev_valid(ent))
@@ -688,6 +751,7 @@ public fw_SetModel(entity, model[])
 	return FMRES_IGNORED;
 }
 
+#endif
 // I Have No Idea About This xD.
 
 public fw_UpdateClientData_Post(id, sendweapons, cd_handle)
@@ -1158,7 +1222,9 @@ public Wpnlist(id,type)
 	if(is_user_alive(id))
 	{
 		message_begin(MSG_ONE, get_user_msgid("WeaponList"), _, id);
-		write_string(type?"weapon_bunker":"weapon_hegrenade");
+		write_string(type?"weapon_bunker":weapon_bunker);
+		
+		#if defined HE_ITEM
 		write_byte(12);
 		write_byte(1);
 		write_byte(-1);
@@ -1167,6 +1233,21 @@ public Wpnlist(id,type)
 		write_byte(1);
 		write_byte(CSW_BUNKER);
 		write_byte(24);
+		#endif
+		
+		#if defined KNIFE_ITEM
+		
+		write_byte(-1);
+		write_byte(-1);
+		write_byte(-1);
+		write_byte(-1);
+		write_byte(2);
+		write_byte(1);
+		write_byte(CSW_BUNKER);
+		write_byte(24);
+		
+		#endif
+		
 		message_end();
 	}
 }
