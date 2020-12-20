@@ -235,14 +235,15 @@ public plugin_init()
 	register_forward(FM_UpdateClientData, "fw_UpdateClientData_Post", 1);
 	register_forward(FM_SetModel, "fw_SetModel");
 	
+	
 	// Touch
 	register_touch(C_Missile, "*", "Fw_Touch");
 	register_touch(C_Bunker, "player", "Fw_Touch_Bunker");
 	
 	// Hams
-	
 	RegisterHam(Ham_Item_AddToPlayer, weapon_bunker , "fw_Item_AddToPlayer_Post", 1);
 	RegisterHam(Ham_Item_Deploy,weapon_bunker , "fw_Item_Deploy", 1);
+	
 	
 	#if defined HE_ITEM
 		RegisterHam(Ham_Weapon_PrimaryAttack,weapon_bunker,"fw_Primary_Attack");
@@ -275,6 +276,7 @@ public plugin_init()
 	#if defined ZOMBIE_PLAUGE
 		g_itemid = zp_register_extra_item("[CSO] Bunker Buster LTD", 10 ,ZP_TEAM_HUMAN);
 	#endif
+	
 	
 }
 
@@ -460,10 +462,10 @@ public newRound()
 		Remove_Bunker(i);
 	}
 	
-	remove_entity_name(C_Plane);
-	remove_entity_name(C_Target);
-	remove_entity_name(C_Missile);
-	remove_entity_name(C_Bunker);
+	fm_remove_entity_name(C_Plane);
+	fm_remove_entity_name(C_Target);
+	fm_remove_entity_name(C_Missile);
+	fm_remove_entity_name(C_Bunker);
 }
 
 public logevent_round_end()
@@ -473,10 +475,10 @@ public logevent_round_end()
 		Remove_Bunker(i);
 	}
 	
-	remove_entity_name(C_Plane);
-	remove_entity_name(C_Target);
-	remove_entity_name(C_Missile);
-	remove_entity_name(C_Bunker);
+	fm_remove_entity_name(C_Plane);
+	fm_remove_entity_name(C_Target);
+	fm_remove_entity_name(C_Missile);
+	fm_remove_entity_name(C_Bunker);
 	
 }
 
@@ -545,22 +547,22 @@ public Remove_Entities_By_Id(id)
 	new ent;
 	while((ent = find_ent_by_class(ent,C_Plane))!= 0)
 	{
-		if(is_valid_ent(ent))
+		if(pev_valid(ent))
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				remove_entity(ent);
+				fm_remove_entity(ent);
 				remove_task(ent);
 			}
 		}
 	}
 	while((ent = find_ent_by_class(ent,C_Missile))!= 0)
 	{
-		if(is_valid_ent(ent))
+		if(pev_valid(ent))
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				remove_entity(ent);
+				fm_remove_entity(ent);
 				remove_task(ent);
 				remove_task(ent+TASK_FIRE);
 			}
@@ -568,11 +570,11 @@ public Remove_Entities_By_Id(id)
 	}
 	while((ent = find_ent_by_class(ent,C_Target))!= 0)
 	{
-		if(is_valid_ent(ent))
+		if(pev_valid(ent))
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				remove_entity(ent);
+				fm_remove_entity(ent);
 				remove_task(ent);
 			}
 		}
@@ -597,7 +599,7 @@ public fw_CmdStart(id, uc_handle, seed)
 {
 	if(is_user_alive(id))
 	{
-		if(Get_BitVar(g_has_Bunker,id) && get_user_weapon(id) == CSW_BUNKER)
+		if(Get_BitVar(g_has_Bunker,id) && cs_get_user_weapon(id) == CSW_BUNKER)
 		{
 			new Float:eOrigin[3],Float:hOrigin[3];
 		
@@ -686,21 +688,20 @@ public fw_CmdStart(id, uc_handle, seed)
 			if(OldButton & IN_USE && !(iButton & IN_USE))
 			{
 				
-					switch(g_iPlayer_Mode[id])
+				switch(g_iPlayer_Mode[id])
+				{
+					case MODE_ENDLESS:
 					{
-						case MODE_ENDLESS:
-						{
-							g_iPlayer_Mode[id] = MODE_INPOINT;
-							client_print(id,print_center,"Bunker Mode:- Between Targets");
-						}
+						g_iPlayer_Mode[id] = MODE_INPOINT;
+						client_print(id,print_center,"Bunker Mode:- Between Targets");
+					}
 				
-						case MODE_INPOINT:
-						{
-							g_iPlayer_Mode[id] = MODE_ENDLESS;
-							client_print(id,print_center,"Bunker Mode:- EndLess");
-						}
-					}	
-				
+					case MODE_INPOINT:
+					{
+						g_iPlayer_Mode[id] = MODE_ENDLESS;
+						client_print(id,print_center,"Bunker Mode:- EndLess");
+					}
+				}
 			}
 		}
 	}
@@ -714,13 +715,16 @@ public fw_Primary_Attack(ent)
 	{
 		new id = pev(ent,pev_owner);
 		
-		if(Get_BitVar(g_has_Bunker,id))
+		if(is_user_alive(id))
 		{
-			// The Player Has Not Opened Zoom , So Lets Block Him xD
-			if(!Get_BitVar(g_zoom,id))
-				return HAM_SUPERCEDE;
+			if(Get_BitVar(g_has_Bunker,id))
+			{
+				// The Player Has Not Opened Zoom , So Lets Block Him xD
+				if(!Get_BitVar(g_zoom,id))
+					return HAM_SUPERCEDE;
+			}
 		}
-	}	
+	}
 	return HAM_IGNORED;	
 }
 
@@ -734,6 +738,9 @@ public fw_SetModel(entity, model[])
 	static id;
 	id = pev(entity, pev_owner);
 	
+	if(!is_user_alive(id))
+		return FMRES_IGNORED;
+		
 	if(equal(model, old_w_model))
 	{
 		if(Get_BitVar(g_has_Bunker, id))
@@ -752,6 +759,7 @@ public fw_SetModel(entity, model[])
 }
 
 #endif
+
 // I Have No Idea About This xD.
 
 public fw_UpdateClientData_Post(id, sendweapons, cd_handle)
@@ -780,11 +788,11 @@ public Fw_Touch(iEnt, iTouch)
 		
 			CreateExplosion(iEnt,Origin);
 			
-			set_task(0.1,"Create_Fire",iEnt+TASK_FIRE,_,_,"a",get_pcvar_num(g_iCvar[C_FIRE_TIME])*10);
+			set_task(0.1,"Create_Fire",iEnt + TASK_FIRE,_,_,"a",get_pcvar_num(g_iCvar[C_FIRE_TIME])*10);
 			emit_sound(iEnt, CHAN_ITEM, SOUND[5],  0.5, ATTN_NORM, 0, PITCH_NORM);
 			
 
-			set_task(get_pcvar_float(g_iCvar[C_FIRE_TIME]) + 2.0,"Kill_Remove",iEnt);
+			set_task(get_pcvar_float(g_iCvar[C_FIRE_TIME]) + 1.0,"Kill_Remove",iEnt);
 			
 			// We Don't Remove The Ent , Just make it Invisible
 			
@@ -806,7 +814,7 @@ public Fw_Touch(iEnt, iTouch)
 			write_byte(random_num(10, 20)); // framerate
 			message_end();
 			
-			Direct_Remove(iEnt);
+			Kill_Remove(iEnt);
 		}
 		
 	}
@@ -840,7 +848,6 @@ public fw_Item_AddToPlayer_Post(Ent, id)
 	else
 	{
 		// Just For Safety
-		
 		set_pev(Ent,pev_impulse,0);
 		Wpnlist(id,0);
 	}
@@ -880,9 +887,6 @@ public Create_Plane(id,Float:sOrigin[3],Float:eOrigin[3])
 	
 	set_pev(i_Ent, pev_origin,sOrigin);
 	set_pev(i_Ent, pev_iuser1,id);
-	set_pev(i_Ent, pev_light_level, 180);
-	set_pev(i_Ent, pev_rendermode, kRenderTransAdd);
-	set_pev(i_Ent, pev_renderamt, 255.0);
 	
 	set_pev(i_Ent, pev_vuser1,sOrigin);
 	set_pev(i_Ent, pev_vuser2,eOrigin);
@@ -950,7 +954,7 @@ public Create_Missile(id,Float:sOrigin[3])
 	set_pev(i_Ent, pev_size, Float:{-34.0, -34.0, -94.0}, Float:{34.0, 34.0, 95.0});
 	set_pev(i_Ent, pev_iuser1,id);
 	
-	sOrigin[2] = GetMaxHeight(i_Ent,sOrigin) - 100;
+	sOrigin[2] = GetMaxHeight(i_Ent,sOrigin);
 	
 	set_pev(i_Ent, pev_origin,sOrigin);
 	
@@ -979,17 +983,17 @@ public Create_Fire(taskid)
 {
 	new ent = taskid-TASK_FIRE;
 	
-	if(is_valid_ent(ent))
+	if(pev_valid(ent))
 	{
 		new iOwner = pev(ent,pev_iuser1);
 		new Float:Origin[3];
 		
-		static iVictim;
+		new iVictim;
 		iVictim = FM_NULLENT;
 		
 		pev(ent,pev_origin,Origin);
 		
-		while((iVictim = engfunc(EngFunc_FindEntityInSphere, iVictim, Origin, get_pcvar_float(g_iCvar[C_DMG_F_RAD]))))
+		while((iVictim = find_ent_in_sphere(iVictim, Origin, get_pcvar_float(g_iCvar[C_DMG_F_RAD]))) > 0)
 		{
 			if(is_user_alive(iVictim))
 			{	
@@ -1010,12 +1014,18 @@ public Create_Fire(taskid)
 
 public Task_Siren(id)
 {
-	emit_sound(id, CHAN_WEAPON, SOUND[S_TARGET],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	if(is_user_alive(id))
+	{
+		emit_sound(id, CHAN_WEAPON, SOUND[S_TARGET],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	}
 }
 
 public Task_Fly(ent)
 {
-	emit_sound(0, CHAN_WEAPON, SOUND[S_FLY],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	if(pev_valid(ent))
+	{
+		emit_sound(0, CHAN_WEAPON, SOUND[S_FLY],  VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	}
 }
 
 public Think_Missile(ent)
@@ -1043,51 +1053,53 @@ public Think_Plane(ent)
 		new Float:sOrigin[3],Float:Velocity[3],Float:eOrigin[3],Float:Origin[3], Float:vRefDistance, Float:vCurrentDistance ,iDiffDistance;
 		new id = pev(ent,pev_iuser1);
 		
-		pev(ent,pev_origin,Origin);
-		pev(ent,pev_vuser1,sOrigin);
-		pev(ent,pev_vuser2,eOrigin);
-		
-		velocity_by_aim(ent, 350, Velocity);
-		set_pev(ent, pev_velocity, Velocity);
-		
-		if(g_iPlayer_Mode[id] == MODE_INPOINT)
+		if(is_user_alive(id))
 		{
-			sOrigin[2] = Origin[2];
-			eOrigin[2] = Origin[2];
+			pev(ent,pev_origin,Origin);
+			pev(ent,pev_vuser1,sOrigin);
+			pev(ent,pev_vuser2,eOrigin);
+		
+			velocity_by_aim(ent, 350, Velocity);
+			set_pev(ent, pev_velocity, Velocity);
+		
+			if(g_iPlayer_Mode[id] == MODE_INPOINT)
+			{
+				sOrigin[2] = Origin[2];
+				eOrigin[2] = Origin[2];
 			
-			// Thanks RAHEEM for This Calculation , You know from where i took it xD
+				// Thanks RAHEEM for This Calculation , You know from where i took it xD
 			
-			// Refference distance = distance between first point and second point defined by player
-			// Current distance = distance between first point defined by player and current origin of the plane
+				// Refference distance = distance between first point and second point defined by player
+				// Current distance = distance between first point defined by player and current origin of the plane
 			
-			vRefDistance = get_distance_f(sOrigin, eOrigin);
-			vCurrentDistance = get_distance_f(sOrigin, Origin);
+				vRefDistance = get_distance_f(sOrigin, eOrigin);
+				vCurrentDistance = get_distance_f(sOrigin, Origin);
 				
-			// Get difference as integer, ensure that it always +ve using abs (Maybe not neccesary)
-			iDiffDistance = abs(floatround(vRefDistance)) - abs(floatround(vCurrentDistance));
+				// Get difference as integer, ensure that it always +ve using abs (Maybe not neccesary)
+				iDiffDistance = abs(floatround(vRefDistance)) - abs(floatround(vCurrentDistance));
 			
-			if(iDiffDistance >= - 50.0)
+				if(iDiffDistance >= - 50.0)
+				{
+					Create_Missile(id,Origin);
+				}
+			}
+			else if(g_iPlayer_Mode[id] == MODE_ENDLESS)
 			{
 				Create_Missile(id,Origin);
 			}
 		}
-		else if(g_iPlayer_Mode[id] == MODE_ENDLESS)
-		{
-			Create_Missile(id,Origin);
-		}
-		
 		set_pev(ent, pev_nextthink,get_gametime() + 1.0);
 	}
 }
 
 public Direct_Remove(ent)
 {
-	if(is_valid_ent(ent)) 	remove_entity(ent);
+	if(pev_valid(ent))  fm_remove_entity(ent);
 }
 
 public Kill_Remove(ent)
 {
-	if(is_valid_ent(ent)) set_pev(ent, pev_flags, FL_KILLME);
+	if(pev_valid(ent)) set_pev(ent, pev_flags, FL_KILLME);
 }
 
 public Aim_To_Target(iEnt, Float:vTargetOrigin[3])
@@ -1111,21 +1123,24 @@ public Aim_To_Target(iEnt, Float:vTargetOrigin[3])
 
 public Make_FireSmoke(Ent)
 {
-	static Float:Origin[3];
-	pev(Ent, pev_origin, Origin);
+	if(pev_valid(Ent))
+	{
+		static Float:Origin[3];
+		pev(Ent, pev_origin, Origin);
 	
-	Origin[2] -= 10.0;
+		Origin[2] -= 10.0;
 	
-	message_begin(MSG_BROADCAST, SVC_TEMPENTITY) ;
-	write_byte(TE_EXPLOSION) ;
-	engfunc(EngFunc_WriteCoord, Origin[0]);
-	engfunc(EngFunc_WriteCoord, Origin[1]);
-	engfunc(EngFunc_WriteCoord, Origin[2]);
-	write_short(m_iSmoke) ;
-	write_byte(10);
-	write_byte(10);
-	write_byte(14);
-	message_end();
+		message_begin(MSG_BROADCAST, SVC_TEMPENTITY) ;
+		write_byte(TE_EXPLOSION) ;
+		engfunc(EngFunc_WriteCoord, Origin[0]);
+		engfunc(EngFunc_WriteCoord, Origin[1]);
+		engfunc(EngFunc_WriteCoord, Origin[2]);
+		write_short(m_iSmoke) ;
+		write_byte(10);
+		write_byte(10);
+		write_byte(14);
+		message_end();
+	}	
 }
 
 public CreateExplosion(ent,Float:fOrigin[3])
@@ -1276,30 +1291,33 @@ stock ham_strip_weapon(id,weapon[])
     return 1;
 }
 
-stock random_fire(ent) {
-	
-	
-	new Float:range = 200.0;
-	
-	new Float:iOrigin[3], Float:Origin[3];
-	pev(ent,pev_origin,Origin);
-	
-	for ( new i = 1 ; i <= 3 ; i++ ) 
+stock random_fire(ent) 
+{
+	if(pev_valid(ent))
 	{
-		iOrigin[0] = Origin[0] + random_float(-range, range);
-		iOrigin[1] = Origin[1] + random_float(-range, range);
-		iOrigin[2] = Origin[2];
-		
-		
-		while ( get_distance_f(iOrigin, Origin) > range ) 
+	
+		new Float:range = 200.0;
+	
+		new Float:iOrigin[3], Float:Origin[3];
+		pev(ent,pev_origin,Origin);
+	
+		for ( new i = 1 ; i <= 3 ; i++ ) 
 		{
-			
 			iOrigin[0] = Origin[0] + random_float(-range, range);
 			iOrigin[1] = Origin[1] + random_float(-range, range);
 			iOrigin[2] = Origin[2];
-		}
 		
-		Flame(iOrigin);	
+		
+			while ( get_distance_f(iOrigin, Origin) > range ) 
+			{
+			
+				iOrigin[0] = Origin[0] + random_float(-range, range);
+				iOrigin[1] = Origin[1] + random_float(-range, range);
+				iOrigin[2] = Origin[2];
+			}
+		
+			Flame(iOrigin);	
+		}
 	}
 }
 
