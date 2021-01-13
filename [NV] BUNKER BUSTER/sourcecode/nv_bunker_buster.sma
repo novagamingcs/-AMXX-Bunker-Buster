@@ -124,7 +124,7 @@
 /*            	NEWS                */
 /*----------------------------------*/
 
-new g_selected,g_has_Bunker,g_zoom,Float:pOrigin[3],m_iTrail,m_iSmoke,m_iExp,m_iFire,m_iBlackS,g_maxplayer,g_iPlayer_Mode[33],g_iCvar[10];
+new g_selected,g_has_Bunker,g_zoom,Float:pOrigin[3],m_iTrail,m_iSmoke,m_iExp,m_iFire,m_iBlackS,g_maxplayer,g_iPlayer_Mode[33],g_iCvar[10],g_iEntExist[500];
 
 // Class Names
 new const C_Plane[] = "nv_bunker_plane";
@@ -462,10 +462,7 @@ public newRound()
 		Remove_Bunker(i);
 	}
 	
-	fm_remove_entity_name(C_Plane);
-	fm_remove_entity_name(C_Target);
-	fm_remove_entity_name(C_Missile);
-	fm_remove_entity_name(C_Bunker);
+	Remove_Entities();
 }
 
 public logevent_round_end()
@@ -475,10 +472,7 @@ public logevent_round_end()
 		Remove_Bunker(i);
 	}
 	
-	fm_remove_entity_name(C_Plane);
-	fm_remove_entity_name(C_Target);
-	fm_remove_entity_name(C_Missile);
-	fm_remove_entity_name(C_Bunker);
+	Remove_Entities();
 	
 }
 
@@ -542,6 +536,41 @@ public Remove_Bunker(id)
 	
 }
 
+// Thanks Raheem :-D
+
+public Remove_Entities()
+{
+	new ent;
+	while((ent = find_ent_by_class(ent,C_Plane)) != 0)
+	{
+		if(pev_valid(ent))
+		{
+			Kill_Remove(ent);
+			remove_task(ent);
+			
+		}
+	}
+	while((ent = find_ent_by_class(ent,C_Missile)) != 0)
+	{
+		if(pev_valid(ent))
+		{
+			Kill_Remove(ent);
+			remove_task(ent);
+			remove_task(ent+TASK_FIRE);
+			
+		}
+	}
+	while((ent = find_ent_by_class(ent,C_Target)) != 0)
+	{
+		if(pev_valid(ent))
+		{
+			Kill_Remove(ent);
+			remove_task(ent);
+			
+		}
+	}
+}
+
 public Remove_Entities_By_Id(id)
 {
 	new ent;
@@ -551,7 +580,7 @@ public Remove_Entities_By_Id(id)
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				fm_remove_entity(ent);
+				Kill_Remove(ent);
 				remove_task(ent);
 			}
 		}
@@ -562,7 +591,7 @@ public Remove_Entities_By_Id(id)
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				fm_remove_entity(ent);
+				Kill_Remove(ent);
 				remove_task(ent);
 				remove_task(ent+TASK_FIRE);
 			}
@@ -574,7 +603,7 @@ public Remove_Entities_By_Id(id)
 		{
 			if(pev(ent,pev_iuser1) == id)
 			{
-				fm_remove_entity(ent);
+				Kill_Remove(ent);
 				remove_task(ent);
 			}
 		}
@@ -792,7 +821,7 @@ public Fw_Touch(iEnt, iTouch)
 			emit_sound(iEnt, CHAN_ITEM, SOUND[5],  0.5, ATTN_NORM, 0, PITCH_NORM);
 			
 
-			set_task(get_pcvar_float(g_iCvar[C_FIRE_TIME]) + 1.0,"Kill_Remove",iEnt);
+			set_task(get_pcvar_float(g_iCvar[C_FIRE_TIME]) + 5.0,"Kill_Remove",iEnt);
 			
 			// We Don't Remove The Ent , Just make it Invisible
 			
@@ -895,6 +924,8 @@ public Create_Plane(id,Float:sOrigin[3],Float:eOrigin[3])
 	
 	fm_set_rendering(i_Ent,kRenderFxNone,0,0,0,kRenderTransAlpha,0); 
 	
+	g_iEntExist[i_Ent] = 1;
+	
 	// This is Random Value , I Am Not Sure When To Remove , Bcz This Depends On Map Size :-D
 	
 	set_task(20.0,"Kill_Remove",i_Ent);
@@ -939,7 +970,9 @@ public Create_Target(id,Float:sOrigin[3])
 	
 	set_anim(i_Ent,0);
 	
-	set_task(10.0,"Direct_Remove",i_Ent);
+	g_iEntExist[i_Ent] = 1;
+	
+	set_task(10.0,"Kill_Remove",i_Ent);
 }
 
 public Create_Missile(id,Float:sOrigin[3])
@@ -960,6 +993,8 @@ public Create_Missile(id,Float:sOrigin[3])
 	
 	vAngle[0] -= 90.0;
 	set_pev(i_Ent, pev_angles, vAngle);
+	
+	g_iEntExist[i_Ent] = 1;
 	
 	message_begin( MSG_BROADCAST, SVC_TEMPENTITY );
 	write_byte(TE_BEAMFOLLOW);
@@ -1092,14 +1127,16 @@ public Think_Plane(ent)
 	}
 }
 
-public Direct_Remove(ent)
-{
-	if(pev_valid(ent))  fm_remove_entity(ent);
-}
-
 public Kill_Remove(ent)
 {
-	if(pev_valid(ent)) set_pev(ent, pev_flags, FL_KILLME);
+	if(pev_valid(ent)) 
+	{
+		if(g_iEntExist[ent])
+		{
+			g_iEntExist[ent] = 0;
+			set_pev(ent, pev_flags, pev(ent,pev_flags) | FL_KILLME);
+		}
+	}
 }
 
 public Aim_To_Target(iEnt, Float:vTargetOrigin[3])
